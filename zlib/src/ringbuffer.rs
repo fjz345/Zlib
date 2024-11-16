@@ -6,7 +6,7 @@ pub struct RingBuffer<T, const N: usize> {
     data: [MaybeUninit<T>; N],
     write_loc: usize,
     read_loc: usize,
-    capacity: usize,
+    capacity: usize, // TODO: maybe can read this data compile time?
 }
 
 // impl<T, const N: usize, Idx> Index<Idx> for RingBuffer<T, N>
@@ -52,8 +52,7 @@ impl<T, const N: usize> RingBuffer<T, N> {
         let mut buffer = Self::new();
         for (i, item) in iter.into_iter().enumerate() {
             if i < N {
-                buffer.data[i].write(item);
-                buffer.write_loc += 1;
+                buffer.push(item);
             } else {
                 break; // Stop if we exceed the buffer capacity
             }
@@ -63,6 +62,10 @@ impl<T, const N: usize> RingBuffer<T, N> {
 
     pub fn len(&self) -> usize {
         self.write_loc - self.read_loc
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.capacity
     }
 
     pub fn is_empty(&self) -> bool {
@@ -80,7 +83,7 @@ impl<T, const N: usize> RingBuffer<T, N> {
     }
 
     pub fn push(&mut self, entry: T) {
-        assert_eq!(self.len() < self.capacity, true, "RingBuffer Overflow");
+        assert_eq!(self.len() < self.capacity(), true, "RingBuffer Overflow");
 
         self.data[self.write_loc % self.capacity].write(entry);
         self.write_loc += 1;
@@ -111,7 +114,19 @@ impl<T, const N: usize> RingBuffer<T, N> {
 
     #[inline]
     #[allow(dead_code)]
-    fn get_relative(&self, index: usize) -> Option<&T> {
+    pub fn get_ptr(&self) -> *const T {
+        self.data.as_ptr().cast()
+    }
+
+    #[inline]
+    #[allow(dead_code)]
+    pub fn get_mut_ptr(&mut self) -> *const T {
+        self.data.as_mut_ptr().cast()
+    }
+
+    #[inline]
+    #[allow(dead_code)]
+    pub fn get_relative(&self, index: usize) -> Option<&T> {
         if index < self.len() {
             let read_index = (self.read_loc + index) % self.capacity;
             let val_ref = unsafe { self.data[read_index].assume_init_ref() };
@@ -123,7 +138,7 @@ impl<T, const N: usize> RingBuffer<T, N> {
 
     #[inline]
     #[allow(dead_code)]
-    fn get_relative_mut(&mut self, index: usize) -> Option<&mut T> {
+    pub fn get_relative_mut(&mut self, index: usize) -> Option<&mut T> {
         if index < self.len() {
             let read_index = (self.read_loc + index) % self.capacity;
             let val_ref = unsafe { self.data[read_index].assume_init_mut() };
@@ -223,7 +238,6 @@ where
 }
 
 // impl<T> ExactSizeIterator for Iter<'_, T> {}
-
 // impl<T> FusedIterator for Iter<'_, T> {}
 
 pub struct IterMut<'a, T: 'a> {
@@ -268,8 +282,8 @@ where
     }
 }
 
-impl<T> ExactSizeIterator for IterMut<'_, T> {}
-impl<T> FusedIterator for IterMut<'_, T> {}
+// impl<T> ExactSizeIterator for IterMut<'_, T> {}
+// impl<T> FusedIterator for IterMut<'_, T> {}
 
 impl<T, const N: usize> IntoIterator for RingBuffer<T, N> {
     type Item = T;
